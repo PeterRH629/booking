@@ -250,6 +250,12 @@ $('step-form').addEventListener('submit', async event => {
       }),
     });
     try { history.replaceState(null, '', `?r=${id}`); } catch {}
+    // 記在客戶自己的裝置上，下次預約自動帶入。
+    try {
+      localStorage.setItem('contact', JSON.stringify({
+        name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
+      }));
+    } catch {}
     showResult('已送出，等待確認', { start: state.start, end, service: state.service.name },
       '我們確認後會通知你。請把這一頁的網址存起來，之後可以回來查看狀態或取消預約。', { label: '查看狀態或取消預約', href: `?r=${id}` });
   } catch (error) {
@@ -301,6 +307,10 @@ async function start() {
   }
   $('intro').textContent = `所有時間皆為店家當地時間（${zoneName()}）。`;
   $('booking').hidden = false;
+  try {
+    const saved = JSON.parse(localStorage.getItem('contact')) || {};
+    for (const field of ['name', 'phone', 'email']) $('step-form').elements[field].value = saved[field] || '';
+  } catch {}
   render();
 }
 
