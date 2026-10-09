@@ -54,35 +54,35 @@
 </head>
 <body>
 <main>
-  <h1>Book an Appointment</h1>
-  <p class="note" id="intro">Loading…</p>
+  <h1 id="title"></h1>
+  <p class="note" id="intro"></p>
 
   <section id="booking" hidden>
-    <h2>1. Choose a service</h2>
+    <h2 data-t="stepService"></h2>
     <div class="card" id="services"></div>
 
     <div id="step-date" hidden>
-      <h2>2. Choose a date</h2>
+      <h2 data-t="stepDate"></h2>
       <div class="chips" id="dates"></div>
     </div>
 
     <div id="step-time" hidden>
-      <h2>3. Choose a time</h2>
+      <h2 data-t="stepTime"></h2>
       <div class="grid" id="slots"></div>
-      <p class="note" id="no-slots" hidden>No times are available on this day. Please pick another date.</p>
+      <p class="note" id="no-slots" data-t="noSlots" hidden></p>
     </div>
 
     <form id="step-form" hidden>
-      <h2>4. Your details</h2>
+      <h2 data-t="stepDetails"></h2>
       <div class="card">
-        <label>Name<input name="name" required maxlength="80" autocomplete="name"></label>
-        <label>Phone<input name="phone" required minlength="5" maxlength="30" type="tel" autocomplete="tel"></label>
-        <label>Email (optional)<input name="email" maxlength="120" type="email" autocomplete="email"></label>
-        <label>Notes (optional)<textarea name="notes" rows="2" maxlength="500" placeholder="Anything we should know beforehand?"></textarea></label>
+        <label><span data-t="name"></span><input name="name" required maxlength="80" autocomplete="name"></label>
+        <label><span data-t="phone"></span><input name="phone" required minlength="5" maxlength="30" type="tel" autocomplete="tel"></label>
+        <label><span data-t="email"></span><input name="email" maxlength="120" type="email" autocomplete="email"></label>
+        <label><span data-t="notes"></span><textarea name="notes" rows="2" maxlength="500"></textarea></label>
       </div>
-      <p class="error" id="error" hidden></p>
-      <button class="primary" id="submit">Request Appointment</button>
-      <p class="note" style="margin-top:12px">Your appointment is not final until we confirm it.</p>
+      <p class="error" id="error" data-t="submitFailed" hidden></p>
+      <button class="primary" id="submit" data-t="submit"></button>
+      <p class="note" style="margin-top:12px" data-t="needsConfirm"></p>
     </form>
   </section>
 
@@ -93,7 +93,7 @@
       <span id="result-what"></span>
     </div>
     <p class="note" id="result-note" style="margin-top:12px"></p>
-    <button class="primary danger" id="cancel" hidden>Cancel This Appointment</button>
+    <button class="primary danger" id="cancel" data-t="cancel" hidden></button>
     <p style="margin:20px 4px 0"><a id="result-link" href="."></a></p>
   </section>
 </main>
@@ -102,17 +102,76 @@
 // ---- Settings ----
 const SUPABASE_URL = 'https://mkgtxmophaneywaxiqvy.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_gO8KCuxY_QHq41jBs51ZTA_GGw-2n5g';
-const TIME_ZONE = 'America/Los_Angeles';   // time zone the business hours are in
-// weekday (0 = Sunday) -> [open, close] hour; days not listed are closed.
-const HOURS = { 1: [13, 20], 2: [13, 20], 3: [13, 20], 4: [13, 20], 5: [13, 20], 6: [8, 14] };
+const DEFAULT_OWNER = 'peter';  // whose page opens when the link has no ?o=
 const DAYS_AHEAD = 14;     // how many days ahead can be booked
 const STEP_MINUTES = 30;   // minutes between start times
 const LEAD_MINUTES = 120;  // minimum notice for a booking, in minutes
 const CANCEL_HOURS = 24;   // confirmed bookings can be cancelled up to this many hours before (must match cancel_request in the database)
 
+// Each owner picks the language of their page in the app.
+const STRINGS = {
+  en: {
+    locale: 'en-US',
+    title: 'Book an Appointment', titleWith: name => `Book with ${name}`,
+    loading: 'Loading…', loadFailed: 'Could not load. Please refresh the page.',
+    notFound: 'This booking page does not exist. Please check the link.',
+    notOpen: 'Online booking is not open yet.', timesIn: zone => `All times are shown in ${zone}.`,
+    stepService: '1. Choose a service', stepDate: '2. Choose a date', stepTime: '3. Choose a time', stepDetails: '4. Your details',
+    noSlots: 'No times are available on this day. Please pick another date.',
+    minutes: n => `${n} min`,
+    name: 'Name', phone: 'Phone', email: 'Email (optional)', notes: 'Notes (optional)',
+    notesHint: 'Anything we should know beforehand?',
+    submit: 'Request Appointment', needsConfirm: 'Your appointment is not final until we confirm it.',
+    submitFailed: 'Something went wrong. Please try again.',
+    sent: 'Request sent – awaiting confirmation',
+    sentNote: "We will let you know once it is confirmed. Save this page's link to check the status or cancel later.",
+    checkStatus: 'Check status or cancel', bookAnother: 'Book another time',
+    missing: 'Appointment not found', missingNote: 'This link may no longer be valid.',
+    pending: ['Awaiting confirmation', 'We will let you know once it is confirmed. You can also check back on this page.'],
+    accepted: ['Appointment confirmed', 'See you then!'],
+    declined: ['This time is not available', 'Sorry about that. Please choose another time.'],
+    cancelled: ['Appointment cancelled', 'This appointment has been cancelled.'],
+    tooLate: hours => ` It is less than ${hours} hours away, so please contact us directly if you need to cancel.`,
+    cancel: 'Cancel This Appointment', cancelConfirm: 'Cancel this appointment?',
+  },
+  'zh-Hant': {
+    locale: 'zh-TW',
+    title: '線上預約', titleWith: name => `${name} 線上預約`,
+    loading: '載入中…', loadFailed: '載入失敗，請重新整理頁面。',
+    notFound: '找不到這個預約頁面，請確認連結是否正確。',
+    notOpen: '目前尚未開放線上預約。', timesIn: zone => `所有時間皆為店家當地時間（${zone}）。`,
+    stepService: '1. 選擇服務', stepDate: '2. 選擇日期', stepTime: '3. 選擇時間', stepDetails: '4. 聯絡資料',
+    noSlots: '這一天沒有可預約的時段，請選其他日期。',
+    minutes: n => `${n} 分鐘`,
+    name: '姓名', phone: '電話', email: 'Email（選填）', notes: '備註（選填）',
+    notesHint: '有什麼想先讓我們知道的嗎？',
+    submit: '送出預約申請', needsConfirm: '送出後需經確認才算預約成功。',
+    submitFailed: '送出失敗，請稍後再試一次。',
+    sent: '已送出，等待確認',
+    sentNote: '我們確認後會通知你。請把這一頁的網址存起來，之後可以回來查看狀態或取消預約。',
+    checkStatus: '查看狀態或取消預約', bookAnother: '預約其他時段',
+    missing: '找不到這筆預約', missingNote: '連結可能已失效。',
+    pending: ['等待確認中', '我們確認後會通知你，也可以稍後回到這一頁查看。'],
+    accepted: ['預約已確認', '期待與你見面。'],
+    declined: ['這個時段無法安排', '很抱歉，請改選其他時段。'],
+    cancelled: ['預約已取消', '這筆預約已經取消。'],
+    tooLate: hours => `距離預約不到 ${hours} 小時，如需取消請直接與我們聯絡。`,
+    cancel: '取消這筆預約', cancelConfirm: '確定要取消這筆預約嗎？',
+  },
+};
+
 // ---- Helpers ----
 const $ = id => document.getElementById(id);
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+let T = STRINGS.en;            // strings for the owner's language
+let timeZone = 'UTC';          // time zone the owner's business hours are in
+
+function setLocale(language, zone) {
+  T = STRINGS[language] || STRINGS.en;
+  try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); timeZone = zone; } catch { timeZone = 'UTC'; }
+  document.documentElement.lang = language === 'zh-Hant' ? 'zh-Hant' : 'en';
+  for (const element of document.querySelectorAll('[data-t]')) element.textContent = T[element.dataset.t];
+  $('step-form').elements.notes.placeholder = T.notesHint;
+}
 
 async function api(path, options = {}) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -127,7 +186,7 @@ const rpc = (name, body) => api(`rpc/${name}`, { method: 'POST', body: JSON.stri
 // Wall-clock time in the business time zone -> instant in ms, handling daylight saving.
 function zoneOffset(ms) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
-    timeZone: TIME_ZONE, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
     hour: '2-digit', minute: '2-digit', second: '2-digit',
   }).formatToParts(new Date(ms)).map(p => [p.type, p.value]));
   return Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second) - Math.floor(ms / 1000) * 1000;
@@ -136,9 +195,9 @@ function wallTime(year, month, day, minutes) {
   const guess = Date.UTC(year, month - 1, day, 0, minutes);
   return guess - zoneOffset(guess - zoneOffset(guess));
 }
-const formatDate = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long' });
-const formatTime = ms => new Date(ms).toLocaleTimeString('en-US', { timeZone: TIME_ZONE, hour: 'numeric', minute: '2-digit' });
-const zoneName = () => new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, timeZoneName: 'short' })
+const formatDate = ms => new Date(ms).toLocaleDateString(T.locale, { timeZone, month: 'long', day: 'numeric', weekday: 'long' });
+const formatTime = ms => new Date(ms).toLocaleTimeString(T.locale, { timeZone, hour: 'numeric', minute: '2-digit' });
+const zoneName = () => new Intl.DateTimeFormat(T.locale, { timeZone, timeZoneName: 'short' })
   .formatToParts(new Date()).find(p => p.type === 'timeZoneName').value;
 
 function button(className, pressed, onClick) {
@@ -156,23 +215,27 @@ function text(tag, value) {
 }
 
 // ---- Booking flow ----
-const state = { services: [], busy: [], service: null, day: null, start: null };
+const state = { owner: null, services: [], busy: [], service: null, day: null, start: null };
 
 function days() {
-  const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date()).split('-').map(Number);
+  const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date()).split('-').map(Number);
   return Array.from({ length: DAYS_AHEAD }, (_, i) => {
     const date = new Date(Date.UTC(y, m - 1, d + i));
-    return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), weekday: date.getUTCDay() };
+    return {
+      year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate(), weekday: date.getUTCDay(),
+      label: date.toLocaleDateString(T.locale, { timeZone: 'UTC', weekday: 'short' }),
+    };
   });
 }
 
 function slotsFor(day) {
-  const hours = HOURS[day.weekday];
-  if (!hours || !state.service) return [];
+  // hours: weekday (0 = Sunday) -> [open, close] in minutes from midnight; missing days are closed.
+  const hours = state.owner.hours[day.weekday];
+  if (!Array.isArray(hours) || !state.service) return [];
   const length = state.service.duration_minutes;
   const earliest = Date.now() + LEAD_MINUTES * 60000;
   const slots = [];
-  for (let minutes = hours[0] * 60; minutes + length <= hours[1] * 60; minutes += STEP_MINUTES) {
+  for (let minutes = hours[0]; minutes + length <= hours[1]; minutes += STEP_MINUTES) {
     const start = wallTime(day.year, day.month, day.day, minutes);
     const end = start + length * 60000;
     if (start >= earliest && !state.busy.some(b => b.start < end && b.end > start)) slots.push(start);
@@ -181,14 +244,13 @@ function slotsFor(day) {
 }
 
 function render() {
-  const services = $('services');
-  services.replaceChildren(...state.services.map(service => {
+  $('services').replaceChildren(...state.services.map(service => {
     const option = button('option', state.service === service, () => {
       state.service = service; state.start = null; render();
     });
     const label = document.createElement('span');
     const price = service.price > 0 ? ` · $${service.price}` : '';
-    label.append(service.name, text('small', `${service.duration_minutes} min${price}`));
+    label.append(service.name, text('small', T.minutes(service.duration_minutes) + price));
     option.append(label, text('span', '✓'));
     option.lastChild.className = 'check';
     return option;
@@ -199,7 +261,7 @@ function render() {
     const selected = state.day && state.day.day === day.day && state.day.month === day.month;
     const chip = button('chip', !!selected, () => { state.day = day; state.start = null; render(); });
     chip.disabled = slotsFor(day).length === 0;
-    chip.append(text('small', WEEKDAYS[day.weekday]), `${day.month}/${day.day}`);
+    chip.append(text('small', day.label), `${day.month}/${day.day}`);
     return chip;
   }));
 
@@ -242,7 +304,7 @@ $('step-form').addEventListener('submit', async event => {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
       body: JSON.stringify({
-        id,
+        id, owner_id: state.owner.owner_id,
         name: form.get('name').trim(), phone: form.get('phone').trim(),
         email: form.get('email').trim(), notes: form.get('notes').trim(),
         service_id: state.service.id, service_name: state.service.name,
@@ -256,10 +318,9 @@ $('step-form').addEventListener('submit', async event => {
         name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
       }));
     } catch {}
-    showResult('Request sent – awaiting confirmation', { start: state.start, end, service: state.service.name },
-      'We will let you know once it is confirmed. Save this page\'s link to check the status or cancel later.', { label: 'Check status or cancel', href: `?r=${id}` });
+    showResult(T.sent, { start: state.start, end, service: state.service.name }, T.sentNote,
+      { label: T.checkStatus, href: `?r=${id}` });
   } catch (error) {
-    $('error').textContent = 'Something went wrong. Please try again.';
     $('error').hidden = false;
     $('submit').disabled = false;
   }
@@ -267,22 +328,23 @@ $('step-form').addEventListener('submit', async event => {
 
 async function showStatus(id) {
   const rows = await rpc('get_request_status', { request_id: id });
-  const again = { label: 'Book another time', href: '.' };
-  if (!rows.length) return showResult('Appointment not found', null, 'This link may no longer be valid.', again);
+  if (!rows.length) {
+    setLocale('en', 'UTC');
+    $('title').textContent = T.title;
+    return showResult(T.missing, null, T.missingNote, { label: T.bookAnother, href: '.' });
+  }
+  setLocale(rows[0].language, rows[0].time_zone);
+  $('title').textContent = T.title;
+  const again = { label: T.bookAnother, href: `?o=${encodeURIComponent(rows[0].slug)}` };
   const row = { start: Date.parse(rows[0].start_at), end: Date.parse(rows[0].end_at), service: rows[0].service_name };
-  const status = {
-    pending: ['Awaiting confirmation', 'We will let you know once it is confirmed. You can also check back on this page.'],
-    accepted: ['Appointment confirmed', 'See you then!'],
-    declined: ['This time is not available', 'Sorry about that. Please choose another time.'],
-    cancelled: ['Appointment cancelled', 'This appointment has been cancelled.'],
-  }[rows[0].status];
-  const isPending = rows[0].status === 'pending';
-  const canCancel = isPending || (rows[0].status === 'accepted' && row.start - Date.now() > CANCEL_HOURS * 3600000);
+  const status = T[rows[0].status];
+  const canCancel = rows[0].status === 'pending'
+    || (rows[0].status === 'accepted' && row.start - Date.now() > CANCEL_HOURS * 3600000);
   const tooLate = rows[0].status === 'accepted' && !canCancel && row.start > Date.now();
-  showResult(status[0], row, status[1] + (tooLate ? ` It is less than ${CANCEL_HOURS} hours away, so please contact us directly if you need to cancel.` : ''), again);
+  showResult(status[0], row, status[1] + (tooLate ? T.tooLate(CANCEL_HOURS) : ''), again);
   $('cancel').hidden = !canCancel;
   $('cancel').onclick = async () => {
-    if (!confirm('Cancel this appointment?')) return;
+    if (!confirm(T.cancelConfirm)) return;
     $('cancel').disabled = true;
     try { await rpc('cancel_request', { request_id: id }); } catch {}
     $('cancel').disabled = false;
@@ -291,21 +353,32 @@ async function showStatus(id) {
 }
 
 async function start() {
-  const requestId = new URLSearchParams(location.search).get('r');
-  if (requestId) return showStatus(requestId);
+  const params = new URLSearchParams(location.search);
+  if (params.get('r')) return showStatus(params.get('r'));
 
-  const now = new Date();
-  const [services, busy] = await Promise.all([
-    api('services?select=id,name,duration_minutes,price&order=name'),
-    rpc('get_busy', { range_start: now.toISOString(), range_end: new Date(now.getTime() + (DAYS_AHEAD + 1) * 86400000).toISOString() }),
-  ]);
-  state.services = services;
-  state.busy = busy.map(b => ({ start: Date.parse(b.start_at), end: Date.parse(b.end_at) }));
-  if (!services.length) {
-    $('intro').textContent = 'Online booking is not open yet.';
+  const owner = await rpc('get_booking_page', { owner_slug: params.get('o') || DEFAULT_OWNER });
+  if (!owner) {
+    $('title').textContent = T.title;
+    $('intro').textContent = T.notFound;
     return;
   }
-  $('intro').textContent = `All times are shown in ${zoneName()}.`;
+  setLocale(owner.language, owner.time_zone);
+  $('title').textContent = owner.display_name ? T.titleWith(owner.display_name) : T.title;
+  document.title = $('title').textContent;
+
+  const now = new Date();
+  const busy = await rpc('get_busy', {
+    owner: owner.owner_id, range_start: now.toISOString(),
+    range_end: new Date(now.getTime() + (DAYS_AHEAD + 1) * 86400000).toISOString(),
+  });
+  state.owner = owner;
+  state.services = owner.services;
+  state.busy = busy.map(b => ({ start: Date.parse(b.start_at), end: Date.parse(b.end_at) }));
+  if (!state.services.length) {
+    $('intro').textContent = T.notOpen;
+    return;
+  }
+  $('intro').textContent = T.timesIn(zoneName());
   $('booking').hidden = false;
   try {
     const saved = JSON.parse(localStorage.getItem('contact')) || {};
@@ -314,7 +387,9 @@ async function start() {
   render();
 }
 
-start().catch(() => { $('intro').textContent = 'Could not load. Please refresh the page.'; });
+$('title').textContent = T.title;
+$('intro').textContent = T.loading;
+start().catch(() => { $('intro').textContent = T.loadFailed; });
 </script>
 </body>
 </html>
