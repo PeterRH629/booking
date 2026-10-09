@@ -78,7 +78,7 @@
         <label>姓名<input name="name" required maxlength="80" autocomplete="name"></label>
         <label>電話<input name="phone" required minlength="5" maxlength="30" type="tel" autocomplete="tel"></label>
         <label>Email（選填）<input name="email" maxlength="120" type="email" autocomplete="email"></label>
-        <label>備註（選填）<textarea name="notes" rows="2" maxlength="500"></textarea></label>
+        <label>備註（選填）<textarea name="notes" rows="2" maxlength="500" placeholder="有什麼想先讓我們知道的嗎？"></textarea></label>
       </div>
       <p class="error" id="error" hidden></p>
       <button class="primary" id="submit">送出預約申請</button>
@@ -207,7 +207,10 @@ function render() {
   $('step-time').hidden = !state.service || !state.day;
   $('no-slots').hidden = slots.length > 0;
   $('slots').replaceChildren(...slots.map(start => {
-    const chip = button('chip', state.start === start, () => { state.start = start; render(); });
+    const chip = button('chip', state.start === start, () => {
+      state.start = start; render();
+      $('step-form').scrollIntoView({ block: 'start' });
+    });
     chip.textContent = formatTime(start);
     return chip;
   }));
