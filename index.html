@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>線上預約</title>
+<title>Book an Appointment</title>
 <style>
   :root {
     --bg: #f5f5f7; --card: #fff; --text: #1d1d1f; --muted: #6e6e73;
@@ -54,35 +54,35 @@
 </head>
 <body>
 <main>
-  <h1>線上預約</h1>
-  <p class="note" id="intro">載入中…</p>
+  <h1>Book an Appointment</h1>
+  <p class="note" id="intro">Loading…</p>
 
   <section id="booking" hidden>
-    <h2>1. 選擇服務</h2>
+    <h2>1. Choose a service</h2>
     <div class="card" id="services"></div>
 
     <div id="step-date" hidden>
-      <h2>2. 選擇日期</h2>
+      <h2>2. Choose a date</h2>
       <div class="chips" id="dates"></div>
     </div>
 
     <div id="step-time" hidden>
-      <h2>3. 選擇時間</h2>
+      <h2>3. Choose a time</h2>
       <div class="grid" id="slots"></div>
-      <p class="note" id="no-slots" hidden>這一天沒有可預約的時段，請選其他日期。</p>
+      <p class="note" id="no-slots" hidden>No times are available on this day. Please pick another date.</p>
     </div>
 
     <form id="step-form" hidden>
-      <h2>4. 聯絡資料</h2>
+      <h2>4. Your details</h2>
       <div class="card">
-        <label>姓名<input name="name" required maxlength="80" autocomplete="name"></label>
-        <label>電話<input name="phone" required minlength="5" maxlength="30" type="tel" autocomplete="tel"></label>
-        <label>Email（選填）<input name="email" maxlength="120" type="email" autocomplete="email"></label>
-        <label>備註（選填）<textarea name="notes" rows="2" maxlength="500" placeholder="有什麼想先讓我們知道的嗎？"></textarea></label>
+        <label>Name<input name="name" required maxlength="80" autocomplete="name"></label>
+        <label>Phone<input name="phone" required minlength="5" maxlength="30" type="tel" autocomplete="tel"></label>
+        <label>Email (optional)<input name="email" maxlength="120" type="email" autocomplete="email"></label>
+        <label>Notes (optional)<textarea name="notes" rows="2" maxlength="500" placeholder="Anything we should know beforehand?"></textarea></label>
       </div>
       <p class="error" id="error" hidden></p>
-      <button class="primary" id="submit">送出預約申請</button>
-      <p class="note" style="margin-top:12px">送出後需經確認才算預約成功。</p>
+      <button class="primary" id="submit">Request Appointment</button>
+      <p class="note" style="margin-top:12px">Your appointment is not final until we confirm it.</p>
     </form>
   </section>
 
@@ -93,26 +93,26 @@
       <span id="result-what"></span>
     </div>
     <p class="note" id="result-note" style="margin-top:12px"></p>
-    <button class="primary danger" id="cancel" hidden>取消這筆預約</button>
+    <button class="primary danger" id="cancel" hidden>Cancel This Appointment</button>
     <p style="margin:20px 4px 0"><a id="result-link" href="."></a></p>
   </section>
 </main>
 
 <script>
-// ---- 設定 ----
+// ---- Settings ----
 const SUPABASE_URL = 'https://mkgtxmophaneywaxiqvy.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_gO8KCuxY_QHq41jBs51ZTA_GGw-2n5g';
-const TIME_ZONE = 'America/Los_Angeles';   // 營業時間所在時區
-// 星期幾（0 = 週日）→ [開始, 結束] 幾點；沒列出的日子公休。
+const TIME_ZONE = 'America/Los_Angeles';   // time zone the business hours are in
+// weekday (0 = Sunday) -> [open, close] hour; days not listed are closed.
 const HOURS = { 1: [13, 20], 2: [13, 20], 3: [13, 20], 4: [13, 20], 5: [13, 20], 6: [8, 14] };
-const DAYS_AHEAD = 14;     // 開放未來幾天
-const STEP_MINUTES = 30;   // 時段間隔
-const LEAD_MINUTES = 120;  // 最晚需在幾分鐘前預約
-const CANCEL_HOURS = 24;   // 已確認的預約最晚可在幾小時前取消（需與資料庫的 cancel_request 一致）
+const DAYS_AHEAD = 14;     // how many days ahead can be booked
+const STEP_MINUTES = 30;   // minutes between start times
+const LEAD_MINUTES = 120;  // minimum notice for a booking, in minutes
+const CANCEL_HOURS = 24;   // confirmed bookings can be cancelled up to this many hours before (must match cancel_request in the database)
 
-// ---- 工具 ----
+// ---- Helpers ----
 const $ = id => document.getElementById(id);
-const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 async function api(path, options = {}) {
   const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -124,7 +124,7 @@ async function api(path, options = {}) {
 }
 const rpc = (name, body) => api(`rpc/${name}`, { method: 'POST', body: JSON.stringify(body) });
 
-// 店家時區的時鐘時間 → 實際時間點（毫秒），會處理日光節約時間。
+// Wall-clock time in the business time zone -> instant in ms, handling daylight saving.
 function zoneOffset(ms) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
     timeZone: TIME_ZONE, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -136,9 +136,9 @@ function wallTime(year, month, day, minutes) {
   const guess = Date.UTC(year, month - 1, day, 0, minutes);
   return guess - zoneOffset(guess - zoneOffset(guess));
 }
-const formatDate = ms => new Date(ms).toLocaleDateString('zh-TW', { timeZone: TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long' });
-const formatTime = ms => new Date(ms).toLocaleTimeString('zh-TW', { timeZone: TIME_ZONE, hour: 'numeric', minute: '2-digit' });
-const zoneName = () => new Intl.DateTimeFormat('zh-TW', { timeZone: TIME_ZONE, timeZoneName: 'short' })
+const formatDate = ms => new Date(ms).toLocaleDateString('en-US', { timeZone: TIME_ZONE, month: 'long', day: 'numeric', weekday: 'long' });
+const formatTime = ms => new Date(ms).toLocaleTimeString('en-US', { timeZone: TIME_ZONE, hour: 'numeric', minute: '2-digit' });
+const zoneName = () => new Intl.DateTimeFormat('en-US', { timeZone: TIME_ZONE, timeZoneName: 'short' })
   .formatToParts(new Date()).find(p => p.type === 'timeZoneName').value;
 
 function button(className, pressed, onClick) {
@@ -155,7 +155,7 @@ function text(tag, value) {
   return element;
 }
 
-// ---- 預約流程 ----
+// ---- Booking flow ----
 const state = { services: [], busy: [], service: null, day: null, start: null };
 
 function days() {
@@ -188,7 +188,7 @@ function render() {
     });
     const label = document.createElement('span');
     const price = service.price > 0 ? ` · $${service.price}` : '';
-    label.append(service.name, text('small', `${service.duration_minutes} 分鐘${price}`));
+    label.append(service.name, text('small', `${service.duration_minutes} min${price}`));
     option.append(label, text('span', '✓'));
     option.lastChild.className = 'check';
     return option;
@@ -199,7 +199,7 @@ function render() {
     const selected = state.day && state.day.day === day.day && state.day.month === day.month;
     const chip = button('chip', !!selected, () => { state.day = day; state.start = null; render(); });
     chip.disabled = slotsFor(day).length === 0;
-    chip.append(text('small', `週${WEEKDAYS[day.weekday]}`), `${day.month}/${day.day}`);
+    chip.append(text('small', WEEKDAYS[day.weekday]), `${day.month}/${day.day}`);
     return chip;
   }));
 
@@ -250,16 +250,16 @@ $('step-form').addEventListener('submit', async event => {
       }),
     });
     try { history.replaceState(null, '', `?r=${id}`); } catch {}
-    // 記在客戶自己的裝置上，下次預約自動帶入。
+    // Remembered on the customer's own device to prefill next time.
     try {
       localStorage.setItem('contact', JSON.stringify({
         name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
       }));
     } catch {}
-    showResult('已送出，等待確認', { start: state.start, end, service: state.service.name },
-      '我們確認後會通知你。請把這一頁的網址存起來，之後可以回來查看狀態或取消預約。', { label: '查看狀態或取消預約', href: `?r=${id}` });
+    showResult('Request sent – awaiting confirmation', { start: state.start, end, service: state.service.name },
+      'We will let you know once it is confirmed. Save this page\'s link to check the status or cancel later.', { label: 'Check status or cancel', href: `?r=${id}` });
   } catch (error) {
-    $('error').textContent = '送出失敗，請稍後再試一次。';
+    $('error').textContent = 'Something went wrong. Please try again.';
     $('error').hidden = false;
     $('submit').disabled = false;
   }
@@ -267,22 +267,22 @@ $('step-form').addEventListener('submit', async event => {
 
 async function showStatus(id) {
   const rows = await rpc('get_request_status', { request_id: id });
-  const again = { label: '預約其他時段', href: '.' };
-  if (!rows.length) return showResult('找不到這筆預約', null, '連結可能已失效。', again);
+  const again = { label: 'Book another time', href: '.' };
+  if (!rows.length) return showResult('Appointment not found', null, 'This link may no longer be valid.', again);
   const row = { start: Date.parse(rows[0].start_at), end: Date.parse(rows[0].end_at), service: rows[0].service_name };
   const status = {
-    pending: ['等待確認中', '我們確認後會通知你，也可以稍後回到這一頁查看。'],
-    accepted: ['預約已確認', '期待與你見面。'],
-    declined: ['這個時段無法安排', '很抱歉，請改選其他時段。'],
-    cancelled: ['預約已取消', '這筆預約已經取消。'],
+    pending: ['Awaiting confirmation', 'We will let you know once it is confirmed. You can also check back on this page.'],
+    accepted: ['Appointment confirmed', 'See you then!'],
+    declined: ['This time is not available', 'Sorry about that. Please choose another time.'],
+    cancelled: ['Appointment cancelled', 'This appointment has been cancelled.'],
   }[rows[0].status];
   const isPending = rows[0].status === 'pending';
   const canCancel = isPending || (rows[0].status === 'accepted' && row.start - Date.now() > CANCEL_HOURS * 3600000);
   const tooLate = rows[0].status === 'accepted' && !canCancel && row.start > Date.now();
-  showResult(status[0], row, status[1] + (tooLate ? `距離預約不到 ${CANCEL_HOURS} 小時，如需取消請直接與我們聯絡。` : ''), again);
+  showResult(status[0], row, status[1] + (tooLate ? ` It is less than ${CANCEL_HOURS} hours away, so please contact us directly if you need to cancel.` : ''), again);
   $('cancel').hidden = !canCancel;
   $('cancel').onclick = async () => {
-    if (!confirm('確定要取消這筆預約嗎？')) return;
+    if (!confirm('Cancel this appointment?')) return;
     $('cancel').disabled = true;
     try { await rpc('cancel_request', { request_id: id }); } catch {}
     $('cancel').disabled = false;
@@ -302,10 +302,10 @@ async function start() {
   state.services = services;
   state.busy = busy.map(b => ({ start: Date.parse(b.start_at), end: Date.parse(b.end_at) }));
   if (!services.length) {
-    $('intro').textContent = '目前尚未開放線上預約。';
+    $('intro').textContent = 'Online booking is not open yet.';
     return;
   }
-  $('intro').textContent = `所有時間皆為店家當地時間（${zoneName()}）。`;
+  $('intro').textContent = `All times are shown in ${zoneName()}.`;
   $('booking').hidden = false;
   try {
     const saved = JSON.parse(localStorage.getItem('contact')) || {};
@@ -314,7 +314,7 @@ async function start() {
   render();
 }
 
-start().catch(() => { $('intro').textContent = '載入失敗，請重新整理頁面。'; });
+start().catch(() => { $('intro').textContent = 'Could not load. Please refresh the page.'; });
 </script>
 </body>
 </html>
