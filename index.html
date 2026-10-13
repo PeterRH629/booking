@@ -115,7 +115,8 @@ const STEP_MINUTES = 30;   // minutes between start times
 const LEAD_MINUTES = 120;  // minimum notice for a booking, in minutes
 const CANCEL_HOURS = 24;   // confirmed bookings can be cancelled up to this many hours before (must match cancel_request in the database)
 
-// Each owner picks the language of their page in the app.
+// Each owner picks the language of their page in the app; a ?lang= in the link (en, zh, es) overrides it,
+// so a site that links here can keep the visitor's language.
 const STRINGS = {
   en: {
     locale: 'en-US',
@@ -169,6 +170,32 @@ const STRINGS = {
     mine: '你的預約',
     short: { pending: '等待確認', accepted: '已確認', declined: '無法安排', cancelled: '已取消' },
   },
+  es: {
+    locale: 'es-US',
+    title: 'Reservar una cita', titleWith: name => `Reservar con ${name}`,
+    loading: 'Cargando…', loadFailed: 'No se pudo cargar. Actualiza la página.',
+    notFound: 'Esta página de reservas no existe. Revisa el enlace.',
+    notOpen: 'Las reservas en línea aún no están disponibles.', timesIn: zone => `Todos los horarios se muestran en ${zone}.`,
+    stepService: '1. Elige un servicio', stepDate: '2. Elige una fecha', stepTime: '3. Elige una hora', stepDetails: '4. Tus datos',
+    noSlots: 'No hay horarios disponibles este día. Elige otra fecha.',
+    minutes: n => `${n} min`,
+    name: 'Nombre', phone: 'Teléfono', email: 'Correo electrónico (opcional)', notes: 'Notas (opcional)',
+    notesHint: '¿Algo que debamos saber de antemano?',
+    submit: 'Solicitar cita', needsConfirm: 'Tu cita no es definitiva hasta que la confirmemos.',
+    submitFailed: 'Algo salió mal. Inténtalo de nuevo.',
+    sent: 'Solicitud enviada: pendiente de confirmación',
+    sentNote: 'Te avisaremos cuando esté confirmada. Guarda el enlace de esta página para consultar el estado o cancelar más adelante.',
+    checkStatus: 'Ver estado o cancelar', bookAnother: 'Reservar otro horario',
+    missing: 'Cita no encontrada', missingNote: 'Es posible que este enlace ya no sea válido.',
+    pending: ['Pendiente de confirmación', 'Te avisaremos cuando esté confirmada. También puedes volver a consultar esta página.'],
+    accepted: ['Cita confirmada', '¡Nos vemos!'],
+    declined: ['Este horario no está disponible', 'Lo sentimos. Elige otro horario.'],
+    cancelled: ['Cita cancelada', 'Esta cita ha sido cancelada.'],
+    tooLate: hours => ` Faltan menos de ${hours} horas, así que contáctanos directamente si necesitas cancelar.`,
+    cancel: 'Cancelar esta cita', cancelConfirm: '¿Cancelar esta cita?',
+    mine: 'Tus citas',
+    short: { pending: 'Pendiente de confirmación', accepted: 'Confirmada', declined: 'No disponible', cancelled: 'Cancelada' },
+  },
 };
 
 // ---- Helpers ----
@@ -176,10 +203,16 @@ const $ = id => document.getElementById(id);
 let T = STRINGS.en;            // strings for the owner's language
 let timeZone = 'UTC';          // time zone the owner's business hours are in
 
+const LANG = { en: 'en', zh: 'zh-Hant', 'zh-hant': 'zh-Hant', es: 'es' }[(new URLSearchParams(location.search).get('lang') || '').toLowerCase()];
+// Keeps the visitor's chosen language when moving between pages here.
+const withLang = href => LANG ? `${href}${href.includes('?') ? '&' : '?'}lang=${LANG}` : href;
+if (LANG) T = STRINGS[LANG];
+
 function setLocale(language, zone) {
+  language = LANG || language;
   T = STRINGS[language] || STRINGS.en;
   try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); timeZone = zone; } catch { timeZone = 'UTC'; }
-  document.documentElement.lang = language === 'zh-Hant' ? 'zh-Hant' : 'en';
+  document.documentElement.lang = STRINGS[language] ? language : 'en';
   for (const element of document.querySelectorAll('[data-t]')) element.textContent = T[element.dataset.t];
   $('step-form').elements.notes.placeholder = T.notesHint;
 }
@@ -322,7 +355,7 @@ $('step-form').addEventListener('submit', async event => {
         start_at: new Date(state.start).toISOString(), end_at: new Date(end).toISOString(),
       }),
     });
-    try { history.replaceState(null, '', `?r=${id}`); } catch {}
+    try { history.replaceState(null, '', withLang(`?r=${id}`)); } catch {}
     // Remembered on the customer's own device: their bookings, and contact details to prefill next time.
     try {
       localStorage.setItem('bookings', JSON.stringify([id, ...savedBookings()].slice(0, 20)));
@@ -331,7 +364,7 @@ $('step-form').addEventListener('submit', async event => {
       }));
     } catch {}
     showResult(T.sent, { start: state.start, end, service: state.service.name }, T.sentNote,
-      { label: T.checkStatus, href: `?r=${id}` });
+      { label: T.checkStatus, href: withLang(`?r=${id}`) });
   } catch (error) {
     $('error').hidden = false;
     $('submit').disabled = false;
@@ -354,7 +387,7 @@ async function showMine() {
     const start = Date.parse(row.start_at);
     const link = document.createElement('a');
     link.className = 'option' + (Date.parse(row.end_at) < Date.now() ? ' past' : '');
-    link.href = `?r=${row.id}`;
+    link.href = withLang(`?r=${row.id}`);
     const label = document.createElement('span');
     label.append(`${formatDate(start)} ${formatTime(start)}`,
       text('small', [row.service_name, T.short[row.status]].filter(Boolean).join(' · ')));
@@ -368,11 +401,11 @@ async function showStatus(id) {
   if (!rows.length) {
     setLocale('en', 'UTC');
     $('title').textContent = T.title;
-    return showResult(T.missing, null, T.missingNote, { label: T.bookAnother, href: '.' });
+    return showResult(T.missing, null, T.missingNote, { label: T.bookAnother, href: withLang('.') });
   }
   setLocale(rows[0].language, rows[0].time_zone);
   $('title').textContent = T.title;
-  const again = { label: T.bookAnother, href: `?o=${encodeURIComponent(rows[0].slug)}` };
+  const again = { label: T.bookAnother, href: withLang(`?o=${encodeURIComponent(rows[0].slug)}`) };
   const row = { start: Date.parse(rows[0].start_at), end: Date.parse(rows[0].end_at), service: rows[0].service_name };
   const status = T[rows[0].status];
   const canCancel = rows[0].status === 'pending'
