@@ -26,6 +26,8 @@
     padding: 14px 0; border: 0; border-bottom: 1px solid var(--line); background: none; color: inherit;
     font: inherit; text-align: left; cursor: pointer; }
   .option:last-child { border-bottom: 0; }
+  a.option { text-decoration: none; }
+  a.option.past { opacity: .55; }
   .option small { display: block; color: var(--muted); font-size: 14px; }
   .option .check { color: var(--accent); font-weight: 700; visibility: hidden; }
   .option[aria-pressed="true"] .check { visibility: visible; }
@@ -56,6 +58,11 @@
 <main>
   <h1 id="title"></h1>
   <p class="note" id="intro"></p>
+
+  <section id="mine" hidden>
+    <h2 data-t="mine"></h2>
+    <div class="card" id="mine-list"></div>
+  </section>
 
   <section id="booking" hidden>
     <h2 data-t="stepService"></h2>
@@ -133,6 +140,8 @@ const STRINGS = {
     cancelled: ['Appointment cancelled', 'This appointment has been cancelled.'],
     tooLate: hours => ` It is less than ${hours} hours away, so please contact us directly if you need to cancel.`,
     cancel: 'Cancel This Appointment', cancelConfirm: 'Cancel this appointment?',
+    mine: 'Your appointments',
+    short: { pending: 'Awaiting confirmation', accepted: 'Confirmed', declined: 'Not available', cancelled: 'Cancelled' },
   },
   'zh-Hant': {
     locale: 'zh-TW',
@@ -157,6 +166,8 @@ const STRINGS = {
     cancelled: ['預約已取消', '這筆預約已經取消。'],
     tooLate: hours => `距離預約不到 ${hours} 小時，如需取消請直接與我們聯絡。`,
     cancel: '取消這筆預約', cancelConfirm: '確定要取消這筆預約嗎？',
+    mine: '你的預約',
+    short: { pending: '等待確認', accepted: '已確認', declined: '無法安排', cancelled: '已取消' },
   },
 };
 
@@ -312,8 +323,9 @@ $('step-form').addEventListener('submit', async event => {
       }),
     });
     try { history.replaceState(null, '', `?r=${id}`); } catch {}
-    // Remembered on the customer's own device to prefill next time.
+    // Remembered on the customer's own device: their bookings, and contact details to prefill next time.
     try {
+      localStorage.setItem('bookings', JSON.stringify([id, ...savedBookings()].slice(0, 20)));
       localStorage.setItem('contact', JSON.stringify({
         name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
       }));
@@ -325,6 +337,31 @@ $('step-form').addEventListener('submit', async event => {
     $('submit').disabled = false;
   }
 });
+
+function savedBookings() {
+  try { return (JSON.parse(localStorage.getItem('bookings')) || []).filter(id => typeof id === 'string'); } catch { return []; }
+}
+
+// Lists the bookings made from this device with this owner, newest first.
+async function showMine() {
+  const ids = savedBookings().slice(0, 10);
+  const found = (await Promise.all(ids.map(id =>
+    rpc('get_request_status', { request_id: id }).then(rows => rows[0] && { id, ...rows[0] }).catch(() => null))))
+    .filter(row => row && row.slug === state.owner.slug)
+    .sort((a, b) => Date.parse(b.start_at) - Date.parse(a.start_at));
+  $('mine').hidden = found.length === 0;
+  $('mine-list').replaceChildren(...found.map(row => {
+    const start = Date.parse(row.start_at);
+    const link = document.createElement('a');
+    link.className = 'option' + (Date.parse(row.end_at) < Date.now() ? ' past' : '');
+    link.href = `?r=${row.id}`;
+    const label = document.createElement('span');
+    label.append(`${formatDate(start)} ${formatTime(start)}`,
+      text('small', [row.service_name, T.short[row.status]].filter(Boolean).join(' · ')));
+    link.append(label, text('span', '›'));
+    return link;
+  }));
+}
 
 async function showStatus(id) {
   const rows = await rpc('get_request_status', { request_id: id });
@@ -374,6 +411,7 @@ async function start() {
   state.owner = owner;
   state.services = owner.services;
   state.busy = busy.map(b => ({ start: Date.parse(b.start_at), end: Date.parse(b.end_at) }));
+  showMine();
   if (!state.services.length) {
     $('intro').textContent = T.notOpen;
     return;
