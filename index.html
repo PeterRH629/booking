@@ -50,6 +50,15 @@
   .error { color: var(--danger); margin: 12px 4px 0; font-size: 15px; }
   .summary { padding: 16px; }
   .summary strong { display: block; font-size: 20px; }
+  .summary .line + .line { margin-top: 12px; }
+  .chip.has-pick:not([aria-pressed="true"]) { border-color: var(--accent); }
+  .picks { padding: 4px 16px; margin-bottom: 12px; }
+  .pick { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .pick:last-child { border-bottom: 0; }
+  .pick small { display: block; color: var(--muted); font-size: 13px; }
+  .pick button { border: 0; background: none; color: var(--danger); font: inherit; font-size: 14px; cursor: pointer; }
+  .pick-bar { position: sticky; bottom: 12px; margin-top: 16px; }
+  .pick-bar .primary { margin-top: 0; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
   a { color: var(--accent); }
   [hidden] { display: none !important; }
 </style>
@@ -77,9 +86,12 @@
       <h2 data-t="stepTime"></h2>
       <div class="grid" id="slots"></div>
       <p class="note" id="no-slots" data-t="noSlots" hidden></p>
+      <p class="note" id="pick-more" data-t="pickMore" style="margin-top:10px" hidden></p>
     </div>
 
     <form id="step-form" hidden>
+      <h2 id="picks-title"></h2>
+      <div class="card picks" id="picks"></div>
       <h2 data-t="stepDetails"></h2>
       <div class="card">
         <label><span data-t="name"></span><input name="name" required maxlength="80" autocomplete="name"></label>
@@ -91,14 +103,12 @@
       <button class="primary" id="submit" data-t="submit"></button>
       <p class="note" style="margin-top:12px" data-t="needsConfirm"></p>
     </form>
+    <div class="pick-bar" id="pick-bar" hidden><button type="button" class="primary" id="pick-continue"></button></div>
   </section>
 
   <section id="result" hidden>
     <h2 id="result-title"></h2>
-    <div class="card summary">
-      <strong id="result-when"></strong>
-      <span id="result-what"></span>
-    </div>
+    <div class="card summary" id="result-rows"></div>
     <p class="note" id="result-note" style="margin-top:12px"></p>
     <button class="primary danger" id="cancel" data-t="cancel" hidden></button>
     <p style="margin:20px 4px 0"><a id="result-link" href="."></a></p>
@@ -113,6 +123,7 @@ const DEFAULT_OWNER = 'peter';  // whose page opens when the link has no ?o=
 const DAYS_AHEAD = 14;     // how many days ahead can be booked
 const STEP_MINUTES = 30;   // minutes between start times
 const LEAD_MINUTES = 120;  // minimum notice for a booking, in minutes
+const MAX_PICKS = 10;      // most times one request can include
 const CANCEL_HOURS = 24;   // confirmed bookings can be cancelled up to this many hours before (must match cancel_request in the database)
 
 // Each owner picks the language of their page in the app; a ?lang= in the link (en, zh, es) overrides it,
@@ -129,6 +140,12 @@ const STRINGS = {
     minutes: n => `${n} min`,
     name: 'Name', phone: 'Phone', email: 'Email (optional)', notes: 'Notes (optional)',
     notesHint: 'Anything we should know beforehand?',
+    pickMore: 'Tap more times or dates to book several at once.',
+    selected: n => `Selected times (${n})`, continueWith: n => `Continue with ${n} selected`, remove: 'Remove',
+    submitMany: n => `Request ${n} Appointments`,
+    sentMany: 'Requests sent – awaiting confirmation',
+    sentManyNote: 'Each time is confirmed separately. Come back to this page to check the status or cancel.',
+    tooMany: max => `You can book up to ${max} times at once.`,
     submit: 'Request Appointment', needsConfirm: 'Your appointment is not final until we confirm it.',
     submitFailed: 'Something went wrong. Please try again.',
     sent: 'Request sent – awaiting confirmation',
@@ -155,6 +172,12 @@ const STRINGS = {
     minutes: n => `${n} 分鐘`,
     name: '姓名', phone: '電話', email: 'Email（選填）', notes: '備註（選填）',
     notesHint: '有什麼想先讓我們知道的嗎？',
+    pickMore: '可以再點其他時間或日期，一次預約多個時段。',
+    selected: n => `已選擇的時段（${n}）`, continueWith: n => `已選 ${n} 個時段，繼續`, remove: '移除',
+    submitMany: n => `送出 ${n} 個預約申請`,
+    sentMany: '已送出，等待確認',
+    sentManyNote: '每個時段會分別確認。回到這個頁面可以查看狀態或取消。',
+    tooMany: max => `一次最多可以預約 ${max} 個時段。`,
     submit: '送出預約申請', needsConfirm: '送出後需經確認才算預約成功。',
     submitFailed: '送出失敗，請稍後再試一次。',
     sent: '已送出，等待確認',
@@ -181,6 +204,12 @@ const STRINGS = {
     minutes: n => `${n} min`,
     name: 'Nombre', phone: 'Teléfono', email: 'Correo electrónico (opcional)', notes: 'Notas (opcional)',
     notesHint: '¿Algo que debamos saber de antemano?',
+    pickMore: 'Toca más horarios o fechas para reservar varios a la vez.',
+    selected: n => `Horarios seleccionados (${n})`, continueWith: n => `Continuar con ${n} seleccionados`, remove: 'Quitar',
+    submitMany: n => `Solicitar ${n} citas`,
+    sentMany: 'Solicitudes enviadas: pendientes de confirmación',
+    sentManyNote: 'Cada horario se confirma por separado. Vuelve a esta página para consultar el estado o cancelar.',
+    tooMany: max => `Puedes reservar hasta ${max} horarios a la vez.`,
     submit: 'Solicitar cita', needsConfirm: 'Tu cita no es definitiva hasta que la confirmemos.',
     submitFailed: 'Algo salió mal. Inténtalo de nuevo.',
     sent: 'Solicitud enviada: pendiente de confirmación',
@@ -259,7 +288,9 @@ function text(tag, value) {
 }
 
 // ---- Booking flow ----
-const state = { owner: null, services: [], busy: [], service: null, day: null, start: null };
+// picks: the times chosen so far, each { start, end, service }; they can span several days and services.
+const state = { owner: null, services: [], busy: [], service: null, day: null, picks: [] };
+const isPicked = start => state.picks.some(p => p.start === start && p.service === state.service);
 
 function days() {
   const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date()).split('-').map(Number);
@@ -282,7 +313,9 @@ function slotsFor(day) {
   for (let minutes = hours[0]; minutes + length <= hours[1]; minutes += STEP_MINUTES) {
     const start = wallTime(day.year, day.month, day.day, minutes);
     const end = start + length * 60000;
-    if (start >= earliest && !state.busy.some(b => b.start < end && b.end > start)) slots.push(start);
+    const clash = [...state.busy, ...state.picks.filter(p => !(p.start === start && p.service === state.service))]
+      .some(b => b.start < end && b.end > start);
+    if (start >= earliest && !clash) slots.push(start);
   }
   return slots;
 }
@@ -290,7 +323,7 @@ function slotsFor(day) {
 function render() {
   $('services').replaceChildren(...state.services.map(service => {
     const option = button('option', state.service === service, () => {
-      state.service = service; state.start = null; render();
+      state.service = service; render();
     });
     const label = document.createElement('span');
     const price = service.price > 0 ? ` · $${service.price}` : '';
@@ -303,8 +336,10 @@ function render() {
   $('step-date').hidden = !state.service;
   $('dates').replaceChildren(...days().map(day => {
     const selected = state.day && state.day.day === day.day && state.day.month === day.month;
-    const chip = button('chip', !!selected, () => { state.day = day; state.start = null; render(); });
+    const chip = button('chip', !!selected, () => { state.day = day; render(); });
     chip.disabled = slotsFor(day).length === 0;
+    const dayStart = wallTime(day.year, day.month, day.day, 0), dayEnd = wallTime(day.year, day.month, day.day, 1440);
+    chip.classList.toggle('has-pick', state.picks.some(p => p.start >= dayStart && p.start < dayEnd));
     chip.append(text('small', day.label), `${day.month}/${day.day}`);
     return chip;
   }));
@@ -313,24 +348,59 @@ function render() {
   $('step-time').hidden = !state.service || !state.day;
   $('no-slots').hidden = slots.length > 0;
   $('slots').replaceChildren(...slots.map(start => {
-    const chip = button('chip', state.start === start, () => {
-      state.start = start; render();
-      $('step-form').scrollIntoView({ block: 'start' });
+    const chip = button('chip', isPicked(start), () => {
+      if (isPicked(start)) {
+        state.picks = state.picks.filter(p => !(p.start === start && p.service === state.service));
+      } else if (state.picks.length >= MAX_PICKS) {
+        alert(T.tooMany(MAX_PICKS));
+      } else {
+        state.picks.push({ start, end: start + state.service.duration_minutes * 60000, service: state.service });
+      }
+      render();
     });
     chip.textContent = formatTime(start);
     return chip;
   }));
 
-  $('step-form').hidden = !state.start;
+  const picks = [...state.picks].sort((a, b) => a.start - b.start);
+  $('pick-more').hidden = picks.length === 0;
+  $('step-form').hidden = picks.length === 0;
+  $('picks-title').textContent = T.selected(picks.length);
+  $('picks').replaceChildren(...picks.map(pick => {
+    const row = document.createElement('div');
+    row.className = 'pick';
+    const label = document.createElement('span');
+    label.append(`${formatDate(pick.start)} ${formatTime(pick.start)}`, text('small', pick.service.name));
+    const remove = text('button', T.remove);
+    remove.type = 'button';
+    remove.addEventListener('click', () => { state.picks = state.picks.filter(p => p !== pick); render(); });
+    row.append(label, remove);
+    return row;
+  }));
+  $('submit').textContent = picks.length > 1 ? T.submitMany(picks.length) : T.submit;
+  $('pick-bar').hidden = picks.length === 0;
+  $('pick-continue').textContent = T.continueWith(picks.length);
 }
 
-function showResult(title, row, note, link) {
+$('pick-continue').addEventListener('click', () => $('step-form').scrollIntoView({ block: 'start' }));
+// The floating "Continue" button is only needed while the form is off screen.
+new IntersectionObserver(([entry]) => { $('pick-bar').style.visibility = entry.isIntersecting ? 'hidden' : ''; })
+  .observe($('submit'));
+
+// rows: one or more { start, end, service } to show, or null.
+function showResult(title, rows, note, link) {
+  rows = rows ? [].concat(rows) : [];
   $('booking').hidden = true;
   $('intro').hidden = true;
   $('result').hidden = false;
   $('result-title').textContent = title;
-  $('result-when').textContent = row ? `${formatDate(row.start)} ${formatTime(row.start)}–${formatTime(row.end)}` : '';
-  $('result-what').textContent = row ? row.service : '';
+  $('result-rows').hidden = rows.length === 0;
+  $('result-rows').replaceChildren(...rows.map(row => {
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.append(text('strong', `${formatDate(row.start)} ${formatTime(row.start)}–${formatTime(row.end)}`), row.service);
+    return line;
+  }));
   $('result-note').textContent = note;
   $('result-link').textContent = link.label;
   $('result-link').href = link.href;
@@ -339,32 +409,34 @@ function showResult(title, row, note, link) {
 $('step-form').addEventListener('submit', async event => {
   event.preventDefault();
   const form = new FormData(event.target);
-  const id = crypto.randomUUID();
-  const end = state.start + state.service.duration_minutes * 60000;
+  const contact = {
+    name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
+  };
+  const picks = [...state.picks].sort((a, b) => a.start - b.start).map(pick => ({ ...pick, id: crypto.randomUUID() }));
   $('submit').disabled = true;
   $('error').hidden = true;
   try {
+    // One request per time, sent together so they all go through or none do.
     await api('booking_requests', {
       method: 'POST',
       headers: { Prefer: 'return=minimal' },
-      body: JSON.stringify({
-        id, owner_id: state.owner.owner_id,
-        name: form.get('name').trim(), phone: form.get('phone').trim(),
-        email: form.get('email').trim(), notes: form.get('notes').trim(),
-        service_id: state.service.id, service_name: state.service.name,
-        start_at: new Date(state.start).toISOString(), end_at: new Date(end).toISOString(),
-      }),
+      body: JSON.stringify(picks.map(pick => ({
+        id: pick.id, owner_id: state.owner.owner_id, ...contact, notes: form.get('notes').trim(),
+        service_id: pick.service.id, service_name: pick.service.name,
+        start_at: new Date(pick.start).toISOString(), end_at: new Date(pick.end).toISOString(),
+      }))),
     });
-    try { history.replaceState(null, '', withLang(`?r=${id}`)); } catch {}
+    const single = picks.length === 1;
+    const home = withLang(`?o=${encodeURIComponent(state.owner.slug)}`);
+    try { history.replaceState(null, '', single ? withLang(`?r=${picks[0].id}`) : home); } catch {}
     // Remembered on the customer's own device: their bookings, and contact details to prefill next time.
     try {
-      localStorage.setItem('bookings', JSON.stringify([id, ...savedBookings()].slice(0, 20)));
-      localStorage.setItem('contact', JSON.stringify({
-        name: form.get('name').trim(), phone: form.get('phone').trim(), email: form.get('email').trim(),
-      }));
+      localStorage.setItem('bookings', JSON.stringify([...picks.map(p => p.id).reverse(), ...savedBookings()].slice(0, 20)));
+      localStorage.setItem('contact', JSON.stringify(contact));
     } catch {}
-    showResult(T.sent, { start: state.start, end, service: state.service.name }, T.sentNote,
-      { label: T.checkStatus, href: withLang(`?r=${id}`) });
+    const rows = picks.map(p => ({ start: p.start, end: p.end, service: p.service.name }));
+    showResult(single ? T.sent : T.sentMany, rows, single ? T.sentNote : T.sentManyNote,
+      { label: T.checkStatus, href: single ? withLang(`?r=${picks[0].id}`) : home });
   } catch (error) {
     $('error').hidden = false;
     $('submit').disabled = false;
