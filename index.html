@@ -40,6 +40,9 @@
   .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
   .chip[aria-pressed="true"] small { color: inherit; }
   .chip:disabled { opacity: .35; cursor: default; }
+  /* Dates: a month-style grid, one column per weekday, so every day is visible without scrolling. */
+  .calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; padding: 2px 2px 8px; }
+  .calendar .chip { min-width: 0; padding: 8px 0; font-size: 14px; }
   label { display: block; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 14px; color: var(--muted); }
   label:last-child { border-bottom: 0; }
   input, textarea { display: block; width: 100%; margin-top: 2px; padding: 4px 0; border: 0; background: none;
@@ -80,7 +83,7 @@
 
     <div id="step-date" hidden>
       <h2 data-t="stepDate"></h2>
-      <div class="chips" id="dates"></div>
+      <div class="calendar" id="dates"></div>
     </div>
 
     <div id="step-time" hidden>
@@ -344,6 +347,8 @@ function render() {
     chip.append(text('small', day.label), `${day.month}/${day.day}`);
     return chip;
   }));
+  // Start the first date under its own weekday column.
+  $('dates').firstElementChild.style.gridColumnStart = days()[0].weekday + 1;
 
   const slots = state.day ? slotsFor(state.day) : [];
   $('step-time').hidden = !state.service || !state.day;
